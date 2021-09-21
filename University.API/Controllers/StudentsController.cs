@@ -1,15 +1,24 @@
 ﻿using System;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Web.Http;
 using University.BL.DTOs;
 using University.BL.Models;
+using University.BL.Repositories.Implements;
+using AutoMapper;
 
 namespace University.API.Controllers
 {
     [RoutePrefix("api/Students")]
     public class StudentsController : ApiController
     {
-        private readonly UniversityEntities context = new UniversityEntities();
+        private readonly IMapper mapper;
+        private readonly StudentRepository studentRepository = new StudentRepository(new UniversityEntities());
+
+        public StudentsController()
+        {
+            this.mapper = WebApiApplication.MapperConfiguration.CreateMapper();
+        }
 
         /// <summary>
         /// 
@@ -17,16 +26,10 @@ namespace University.API.Controllers
         /// <returns></returns>
         [HttpGet]
         //[Route("GetAll")]
-        public IHttpActionResult GetAll()
+        public async Task<IHttpActionResult> GetAll()
         {
-            var students = context.Student.ToList();
-            var studentsDTO = students.Select(x => new StudentDTO
-            {
-                ID = x.ID,
-                FirstMidName = x.FirstMidName,
-                LastName = x.LastName,
-                EnrollmentDate = x.EnrollmentDate.Value
-            }).ToList();
+            var students = await studentRepository.GetAll();
+            var studentsDTO = students.Select(x => mapper.Map<StudentDTO>(x));
 
             return Ok(studentsDTO);
         }
@@ -38,16 +41,10 @@ namespace University.API.Controllers
         /// <returns></returns>
         [HttpGet]
         //[Route("GetById")]
-        public IHttpActionResult GetById(int id)
+        public async Task<IHttpActionResult> GetById(int id)
         {
-            var student = context.Student.Find(id);
-            var studentDTO = new StudentDTO
-            {
-                ID = student.ID,
-                FirstMidName = student.FirstMidName,
-                LastName = student.LastName,
-                EnrollmentDate = student.EnrollmentDate.Value
-            };
+            var student = await studentRepository.GetById(id);
+            var studentDTO = mapper.Map<StudentDTO>(student);
 
             return Ok(studentDTO);
         }
@@ -61,21 +58,15 @@ namespace University.API.Controllers
         /// <response code="400">BadRequest. No se cumple con la validación del modelo.</response>
         /// <response code="500">InternalServerError. Se ha presentado un error.</response>
         [HttpPost]
-        public IHttpActionResult Create(StudentDTO studentDTO)
+        public async Task<IHttpActionResult> Create(StudentDTO studentDTO)
         {
             try
             {
                 if (!ModelState.IsValid)
                     return BadRequest(ModelState);
 
-                var student = context.Student.Add(new Student
-                {
-                    FirstMidName = studentDTO.FirstMidName,
-                    LastName = studentDTO.LastName,
-                    EnrollmentDate = studentDTO.EnrollmentDate
-                });
-                context.SaveChanges();
-
+                var student = mapper.Map<Student>(studentDTO);
+                student = await studentRepository.Insert(student);
                 studentDTO.ID = student.ID;
 
                 return Ok(studentDTO);
@@ -93,7 +84,7 @@ namespace University.API.Controllers
         /// <param name="studentDTO"></param>
         /// <returns></returns>
         [HttpPut]
-        public IHttpActionResult Edit(int id, StudentDTO studentDTO)
+        public async Task<IHttpActionResult> Edit(int id, StudentDTO studentDTO)
         {
             try
             {
@@ -103,14 +94,18 @@ namespace University.API.Controllers
                 if (!ModelState.IsValid)
                     return BadRequest(ModelState);
 
-                var student = context.Student.Find(id);
+                var student = await studentRepository.GetById(id);
                 if (student == null) return NotFound();
 
+                //  Update Field
                 student.LastName = studentDTO.LastName;
                 student.FirstMidName = studentDTO.FirstMidName;
                 student.EnrollmentDate = studentDTO.EnrollmentDate;
 
-                context.SaveChanges();
+                //  Update All
+                //  student = mapper.Map<Student>(studentDTO);
+
+                await studentRepository.Update(student);
 
                 return Ok(studentDTO);
             }
@@ -126,18 +121,17 @@ namespace University.API.Controllers
         /// <param name="id"></param>
         /// <returns></returns>
         [HttpDelete]
-        public IHttpActionResult Delete(int id)
+        public async Task<IHttpActionResult> Delete(int id)
         {
             try
             {
-                var student = context.Student.Find(id);
+                var student = await studentRepository.GetById(id);
                 if (student == null) return NotFound();
 
-                if (context.Enrollment.Any(x => x.StudentID == id))
-                    throw new Exception("Dependencies");
+                //if (context.Enrollment.Any(x => x.StudentID == id))
+                //    throw new Exception("Dependencies");
 
-                context.Student.Remove(student);
-                context.SaveChanges();
+                await studentRepository.Delete(id);
 
                 return Ok();
             }
